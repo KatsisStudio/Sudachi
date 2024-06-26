@@ -636,7 +636,7 @@ namespace Sudachi
                    new()
                    {
                        Name = "headpat",
-                       Description = "Attempt to headpat Yuzu"
+                       Description = "Attempt to headpat Sudachi"
                    },
                    new()
                    {
