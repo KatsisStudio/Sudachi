@@ -33,6 +33,9 @@ namespace Sudachi.Data
 
         [JsonPropertyName("tags_cleaned")]
         public CleanedTagContainer TagsCleaned { set; get; }
+
+        [JsonPropertyName("isCanon")]
+        public bool? IsCanon { set; get; }
     }
 
     public class CleanedTagContainer

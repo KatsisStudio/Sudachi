@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using Color = Discord.Color;
 using Image = SixLabors.ImageSharp.Image;
 
@@ -221,79 +222,24 @@ namespace Sudachi
                     await arg.RespondAsync("❤️");
                 }
             }
-            else if (cmd == "PROJECT")
-            {
-                var allData = JsonSerializer.Deserialize<ProjectContainer>(await _serviceProvider.GetService<HttpClient>().GetStringAsync("https://katsis.net/?json=1")).Projects;
-                var data = allData[_serviceProvider.GetService<Random>().Next(allData.Length)];
-
-                var embed = new EmbedBuilder()
-                {
-                    Title = data.Name,
-                    Description = data.Description,
-                    Color = new Color(98, 17, 37),
-                    ImageUrl = $"https://katsis.net/data/projects/{data.BaseFolder}/{data.Preview}",
-                    Url = data.Links[0].Content,
-                    Footer = new()
-                    {
-                        Text = $"Made by {string.Join(", ", data.Members)}"
-                    }
-                };
-                var type = string.IsNullOrEmpty(data.GameGenre) ? data.Type : data.GameGenre;
-                embed.AddField("Type", char.ToUpperInvariant(type[0]) + type[1..]);
-                if (data.ContentWarnings.Any())
-                {
-                    embed.AddField("Tags", string.Join(", ", data.ContentWarnings));
-                }
-                await arg.RespondAsync(embed: embed.Build());
-            }
-            else if (cmd == "IMAGE")
-            {
-                var allData = JsonSerializer.Deserialize<ImageData[]>(await _serviceProvider.GetService<HttpClient>().GetStringAsync("https://gallery.katsis.net/?json=1"));
-                var img = allData[_serviceProvider.GetService<Random>().Next(allData.Length)];
-
-                var metadata = JsonSerializer.Deserialize<ImageData>(await _serviceProvider.GetService<HttpClient>().GetStringAsync($"https://gallery.katsis.net/i/{img.Id}?json=1"));
-
-                await arg.RespondAsync(embed: new EmbedBuilder()
-                {
-                    Title = (metadata.TagsCleaned.Names.Any() ? $" {string.Join(", ", metadata.TagsCleaned.Names.Select(x => ToSentenceCase(x.Name[5..])))} by" : $"By") + $" {string.Join(", ", metadata.TagsCleaned.Authors.Select(x => ToSentenceCase(x.Name[7..])))}",
-                    Url = $"https://gallery.katsis.net/?id={img.Id}",
-                    Color = new Color(98, 17, 37),
-                    ImageUrl = $"https://gallery.katsis.net/data/images/{img.Id}.{img.Format}"
-                }.Build());
-            }
-            else if (cmd == "COMIC")
-            {
-                var allData = JsonSerializer.Deserialize<ComicContainer[]>(await _serviceProvider.GetService<HttpClient>().GetStringAsync("https://comic.katsis.net/?json=1"));
-                var comic = allData[_serviceProvider.GetService<Random>().Next(allData.Length)];
-                var data = comic.Metadata;
-                var embed = new EmbedBuilder()
-                {
-                    Title = data.Name,
-                    Description = data.Description,
-                    Color = new Color(98, 17, 37),
-                    ImageUrl = $"https://comic.katsis.net/{data.Preview}",
-                    Url = $"https://comic.katsis.net/?comic={comic.Id}",
-                    Footer = new()
-                    {
-                        Text = $"Made by {string.Join(", ", data.Members)}"
-                    }
-                };
-                if (data.ContentWarnings.Any())
-                {
-                    embed.AddField("Tags", string.Join(", ", data.ContentWarnings));
-                }
-                await arg.RespondAsync(embed: embed.Build());
-            }
             else if (cmd == "UPLOAD")
             {
-                if (arg.User.Id != 144851584478740481 && arg.User.Id != 298907835251687424)
+                var artists = new Dictionary<ulong, string>()
+                {
+                    { 298907835251687424, "fractal" },
+                    { 454328717171490816, "pauline" },
+                    { 144851584478740481, "zirk" },
+                    { 1132610174289461278, "dekakumadon" },
+                    { 169575908267524096, "sweaterweather" }
+                };
+                if (!artists.ContainsKey(arg.User.Id))
                 {
                     await arg.RespondAsync(embed: new EmbedBuilder()
                     {
                         Color = Color.Red,
                         Title = "Insufficient permissions",
-                        Description = "You are not allowed to do this"
-                    }.Build(), ephemeral: true);
+                        Description = "You are not allowed to do this, if you believe this is a mistake, please contact Zirk"
+                    }.Build());
                 }
                 else if (_isUploadingGallery)
                 {
@@ -307,7 +253,12 @@ namespace Sudachi
                 else
                 {
                     _isUploadingGallery = true;
-                    var path = (IAttachment)arg.Data.Options.First(x => x.Name == "zip").Value;
+                    var path = (IAttachment)arg.Data.Options.First(x => x.Name == "image").Value;
+                    var names = (string?)arg.Data.Options.First(x => x.Name == "names")?.Value;
+                    if (names != null)
+                    {
+                        
+                    }
 
                     _ = Task.Run(async () =>
                     {
@@ -315,30 +266,39 @@ namespace Sudachi
                         {
                             await arg.RespondAsync("Downloading file...");
 
-                            {
-                                using var resp = await _serviceProvider.GetService<HttpClient>().GetAsync(path.Url);
-                                using var fs = File.Create("TmpGallery.zip");
-                                await resp.Content.CopyToAsync(fs);
-                            }
-
-                            await arg.ModifyOriginalResponseAsync(x => x.Content = "Unzipping file...");
-                            if (Directory.Exists("TmpGallery/"))
-                            {
-                                Directory.Delete("TmpGallery/", true);
-                            }
-                            ZipFile.ExtractToDirectory("TmpGallery.zip", "TmpGallery/");
+                            using var resp = await _serviceProvider.GetService<HttpClient>().GetAsync(path.Url);
+                            var format = path.Url.Split(".")[1].Split('?')[0];
+                            var target = $"file";
+                            using var fs = File.Create($"{target}.{format}");
+                            await resp.Content.CopyToAsync(fs);
 
                             await arg.ModifyOriginalResponseAsync(x => x.Content = "Updating data...");
-                            var oldData = JsonSerializer.Deserialize<List<ImageData>>(File.ReadAllText($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/info.json"));
-                            var newData = JsonSerializer.Deserialize<ImageData[]>(File.ReadAllText("TmpGallery/info.json"));
-
-                            oldData.AddRange(newData);
-                            oldData = oldData.DistinctBy(x => x.Id).ToList();
-                            var newJson = JsonSerializer.Serialize(oldData);
+                            var data = JsonSerializer.Deserialize<List<ImageData>>(File.ReadAllText($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/info.json"));
+                            var uid = Guid.NewGuid().ToString();
+                            var curr = new ImageData()
+                            {
+                                Format = format,
+                                Id = uid,
+                                Author = artists[arg.User.Id],
+                                Rating = (int)(ulong)arg.Data.Options.First(x => x.Name == "rating").Value,
+                                IsCanon = (bool?)arg.Data.Options.First(x => x.Name == "canon")?.Value,
+                                Comment = (string?)arg.Data.Options.First(x => x.Name == "comment")?.Value,
+                                Tags = new()
+                                {
+                                    Characters = names == null ? null : names.Split(',').Select(x => x.Trim()).ToArray()
+                                }
+                            };
+                            data.Add(curr);
+                            var newJson = JsonSerializer.Serialize(data);
                             File.WriteAllText($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/info.json", newJson);
 
-                            CopyContent("TmpGallery/images", $"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/images");
-                            CopyContent("TmpGallery/thumbnails", $"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/thumbnails");
+                            using var bmp = SixLabors.ImageSharp.Image.Load($"{target}.{format}");
+                            var w = bmp.Width;
+                            var h = bmp.Height;
+                            var ratio = w > h ? (w / 200f) : (h / 300f);
+                            bmp.Save($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/thumbnails/{uid}.{format}");
+
+                            File.Copy($"{target}.{format}", $"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/images/{uid}.{format}");
 
                             await arg.ModifyOriginalResponseAsync(x => x.Content = "Updating tags...");
                             Dictionary<string, ImageTagData> tagData;
@@ -350,34 +310,31 @@ namespace Sudachi
                                 tagData[f.Key].Images = f.Value.Images.Distinct().ToList();
                             }
 
-                            foreach (var data in oldData)
-                            {
-                                var tags = new string[][] {
-                                    [ $"author_{data.Author}" ],
-                                    data.Tags.Parodies,
-                                    data.Tags.Characters.Select(x => $"name_{x.ToLowerInvariant()}").ToArray(),
-                                    data.Tags.Others
+                            var tags = new string[][] {
+                                    [ $"author_{curr.Author}" ],
+                                    curr.Tags.Parodies,
+                                    curr.Tags.Characters.Select(x => $"name_{x.ToLowerInvariant()}").ToArray(),
+                                    curr.Tags.Others
                                 };
-                                List<string> tagsStr = new();
-                                foreach (var t in tags)
+                            List<string> tagsStr = new();
+                            foreach (var t in tags)
+                            {
+                                foreach (var t2 in t)
                                 {
-                                    foreach (var t2 in t)
+                                    if (tagData.ContainsKey(t2))
                                     {
-                                        if (tagData.ContainsKey(t2))
+                                        if (!tagData[t2].Images.Contains(curr.Id))
                                         {
-                                            if (!tagData[t2].Images.Contains(data.Id))
-                                            {
-                                                tagData[t2].Images.Add(data.Id);
-                                            }
+                                            tagData[t2].Images.Add(curr.Id);
                                         }
-                                        else
+                                    }
+                                    else
+                                    {
+                                        tagData.Add(t2, new()
                                         {
-                                            tagData.Add(t2, new()
-                                            {
-                                                Images = [data.Id],
-                                                Definition = string.Empty
-                                            });
-                                        }
+                                            Images = [curr.Id],
+                                            Definition = string.Empty
+                                        });
                                     }
                                 }
                             }
@@ -612,42 +569,44 @@ namespace Sudachi
                        Name = "update",
                        Description = "Update comics"
                    },
-                   new()
-                   {
-                       Name = "upload",
-                       Description = "Upload new images for gallery",
-
-                       Options = new()
-                       {
-                           new()
-                           {
-                               Name = "zip",
-                               Description = "ZIP files generated by images classifier software",
-                               Type = ApplicationCommandOptionType.Attachment,
-                               IsRequired = true
-                           }
-                       }
-                   },
-                   new()
-                   {
-                       Name = "image",
-                       Description = "Get a random image by a Katsis member"
-                   },
+                   new SlashCommandBuilder()
+                   .WithName("Upload")
+                   .WithDescription("Upload an image to the gallery")
+                   .AddOptions(
+                       new SlashCommandOptionBuilder()
+                        .WithName("image")
+                        .WithDescription("Drawing to upload")
+                        .WithType(ApplicationCommandOptionType.Attachment)
+                        .WithRequired(true),
+                       new SlashCommandOptionBuilder()
+                       .WithName("rating")
+                       .WithDescription("How NSFW is the image")
+                       .WithType(ApplicationCommandOptionType.Integer)
+                       .AddChoice("Safe", 0)
+                       .AddChoice("Questionnable", 1)
+                       .AddChoice("Explicit", 1)
+                        .WithRequired(true),
+                       new SlashCommandOptionBuilder()
+                        .WithName("names")
+                        .WithDescription("Character names (coma separated)")
+                        .WithType(ApplicationCommandOptionType.String)
+                        .WithRequired(false),
+                       new SlashCommandOptionBuilder()
+                        .WithName("canon")
+                        .WithDescription("Is the drawing canon in the lore of your world")
+                        .WithType(ApplicationCommandOptionType.Boolean)
+                        .WithRequired(false),
+                       new SlashCommandOptionBuilder()
+                        .WithName("comment")
+                        .WithDescription("Additional optional comment by the artist")
+                        .WithType(ApplicationCommandOptionType.String)
+                        .WithRequired(false)
+                        ),
                    new()
                    {
                        Name = "headpat",
                        Description = "Attempt to headpat Sudachi"
                    },
-                   new()
-                   {
-                       Name = "project",
-                       Description = "Get information about a Katsis project"
-                   },
-                   new()
-                   {
-                       Name = "comic",
-                       Description = "Get a random Katsis comic"
-                   }
                 }.Select(x => x.Build()).ToArray();
                 foreach (var cmd in cmds)
                 {
