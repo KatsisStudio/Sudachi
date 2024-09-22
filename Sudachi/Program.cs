@@ -5,10 +5,8 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Sudachi.Data;
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
 using Color = Discord.Color;
 using Image = SixLabors.ImageSharp.Image;
 
@@ -257,7 +255,7 @@ namespace Sudachi
                     var names = (string?)arg.Data.Options.First(x => x.Name == "names")?.Value;
                     if (names != null)
                     {
-                        
+
                     }
 
                     _ = Task.Run(async () =>
@@ -267,10 +265,11 @@ namespace Sudachi
                             await arg.RespondAsync("Downloading file...");
 
                             using var resp = await _serviceProvider.GetService<HttpClient>().GetAsync(path.Url);
-                            var format = path.Url.Split(".")[1].Split('?')[0];
+                            var format = path.Url.Split(".").Last().Split('?')[0];
                             var target = $"file";
                             using var fs = File.Create($"{target}.{format}");
                             await resp.Content.CopyToAsync(fs);
+                            fs.Dispose();
 
                             await arg.ModifyOriginalResponseAsync(x => x.Content = "Updating data...");
                             var data = JsonSerializer.Deserialize<List<ImageData>>(File.ReadAllText($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/info.json"));
@@ -280,12 +279,14 @@ namespace Sudachi
                                 Format = format,
                                 Id = uid,
                                 Author = artists[arg.User.Id],
-                                Rating = (int)(ulong)arg.Data.Options.First(x => x.Name == "rating").Value,
+                                Rating = (int)(long)arg.Data.Options.First(x => x.Name == "rating").Value,
                                 IsCanon = (bool?)arg.Data.Options.First(x => x.Name == "canon")?.Value,
                                 Comment = (string?)arg.Data.Options.First(x => x.Name == "comment")?.Value,
                                 Tags = new()
                                 {
-                                    Characters = names == null ? null : names.Split(',').Select(x => x.Trim()).ToArray()
+                                    Characters = names == null ? [] : names.Split(',').Select(x => x.ToLowerInvariant().Trim()).ToArray(),
+                                    Parodies = [],
+                                    Others = []
                                 }
                             };
                             data.Add(curr);
@@ -296,6 +297,7 @@ namespace Sudachi
                             var w = bmp.Width;
                             var h = bmp.Height;
                             var ratio = w > h ? (w / 200f) : (h / 300f);
+                            bmp.Mutate(x => x.Resize((int)(w / ratio), (int)(h / ratio)));
                             bmp.Save($"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/thumbnails/{uid}.{format}");
 
                             File.Copy($"{target}.{format}", $"{_serviceProvider.GetService<Credentials>().GalleryDataBasePath}/images/{uid}.{format}");
@@ -312,13 +314,14 @@ namespace Sudachi
 
                             var tags = new string[][] {
                                     [ $"author_{curr.Author}" ],
-                                    curr.Tags.Parodies,
-                                    curr.Tags.Characters.Select(x => $"name_{x.ToLowerInvariant()}").ToArray(),
-                                    curr.Tags.Others
+                                    [],
+                                    curr.Tags.Characters == null ? [] : curr.Tags.Characters.Select(x => $"name_{x.ToLowerInvariant()}").ToArray(),
+                                    []
                                 };
                             List<string> tagsStr = new();
                             foreach (var t in tags)
                             {
+                                if (t == null) continue;
                                 foreach (var t2 in t)
                                 {
                                     if (tagData.ContainsKey(t2))
@@ -557,8 +560,10 @@ namespace Sudachi
         {
             _ = Task.Run(async () =>
             {
-                var cmds = new SlashCommandBuilder[]
+                try
                 {
+                    var cmds = new SlashCommandBuilder[]
+                    {
                    new()
                    {
                        Name = "ping",
@@ -570,7 +575,7 @@ namespace Sudachi
                        Description = "Update comics"
                    },
                    new SlashCommandBuilder()
-                   .WithName("Upload")
+                   .WithName("upload")
                    .WithDescription("Upload an image to the gallery")
                    .AddOptions(
                        new SlashCommandOptionBuilder()
@@ -607,26 +612,32 @@ namespace Sudachi
                        Name = "headpat",
                        Description = "Attempt to headpat Sudachi"
                    },
-                }.Select(x => x.Build()).ToArray();
-                foreach (var cmd in cmds)
-                {
+                    }.Select(x => x.Build()).ToArray();
+                    foreach (var cmd in cmds)
+                    {
+                        if (Debugger.IsAttached)
+                        {
+                            await _client.GetGuild(DebugGuildId).CreateApplicationCommandAsync(cmd);
+                        }
+                        else
+                        {
+                            await _client.CreateGlobalApplicationCommandAsync(cmd);
+                        }
+                    }
                     if (Debugger.IsAttached)
                     {
-                        await _client.GetGuild(DebugGuildId).CreateApplicationCommandAsync(cmd);
+                        await _client.GetGuild(DebugGuildId).BulkOverwriteApplicationCommandAsync(cmds);
                     }
                     else
                     {
-                        await _client.CreateGlobalApplicationCommandAsync(cmd);
+                        await _client.GetGuild(DebugGuildId).DeleteApplicationCommandsAsync();
+                        await _client.BulkOverwriteGlobalApplicationCommandsAsync(cmds);
                     }
+                    await Log.LogAsync(new LogMessage(LogSeverity.Info, "Setup", "Command initialized"));
                 }
-                if (Debugger.IsAttached)
+                catch (Exception ex)
                 {
-                    await _client.GetGuild(DebugGuildId).BulkOverwriteApplicationCommandAsync(cmds);
-                }
-                else
-                {
-                    await _client.GetGuild(DebugGuildId).DeleteApplicationCommandsAsync();
-                    await _client.BulkOverwriteGlobalApplicationCommandsAsync(cmds);
+                    await Log.LogErrorAsync(ex, null);
                 }
             });
         }
