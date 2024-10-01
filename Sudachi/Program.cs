@@ -228,7 +228,8 @@ namespace Sudachi
                     { 454328717171490816, "pauline" },
                     { 144851584478740481, "zirk" },
                     { 1132610174289461278, "dekakumadon" },
-                    { 169575908267524096, "sweaterweather" }
+                    { 169575908267524096, "sweaterweather" },
+                    { 188117682606964737, "nehneh" }
                 };
                 if (!artists.ContainsKey(arg.User.Id))
                 {
@@ -252,7 +253,7 @@ namespace Sudachi
                 {
                     _isUploadingGallery = true;
                     var path = (IAttachment)arg.Data.Options.First(x => x.Name == "image").Value;
-                    var names = (string?)arg.Data.Options.First(x => x.Name == "names")?.Value;
+                    var names = (string?)arg.Data.Options.FirstOrDefault(x => x.Name == "names")?.Value;
                     if (names != null)
                     {
 
@@ -280,8 +281,8 @@ namespace Sudachi
                                 Id = uid,
                                 Author = artists[arg.User.Id],
                                 Rating = (int)(long)arg.Data.Options.First(x => x.Name == "rating").Value,
-                                IsCanon = (bool?)arg.Data.Options.First(x => x.Name == "canon")?.Value,
-                                Comment = (string?)arg.Data.Options.First(x => x.Name == "comment")?.Value,
+                                IsCanon = (bool?)arg.Data.Options.FirstOrDefault(x => x.Name == "canon")?.Value,
+                                Comment = (string?)arg.Data.Options.FirstOrDefault(x => x.Name == "comment")?.Value,
                                 Tags = new()
                                 {
                                     Characters = names == null ? [] : names.Split(',').Select(x => x.ToLowerInvariant().Trim()).ToArray(),
