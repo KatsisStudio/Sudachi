@@ -474,7 +474,7 @@ namespace Sudachi
                                     throw new InvalidOperationException($"Commit ended with {p.ExitCode} exit code");
                                 }
 
-                                process.Append("Pushing changes...");
+                                /*process.Append("Pushing changes...");
                                 await arg.ModifyOriginalResponseAsync(x => x.Content = process.ToString() + "\n```");
 
                                 p = Process.Start(new ProcessStartInfo() { FileName = "git", Arguments = "push origin main", WorkingDirectory = "Temp/Comics" });
@@ -484,7 +484,7 @@ namespace Sudachi
                                     throw new InvalidOperationException($"Push ended with {p.ExitCode} exit code");
                                 }
 
-                                process.AppendLine(" OK");
+                                process.AppendLine(" OK");*/
                             }
 
                             process.AppendLine();
